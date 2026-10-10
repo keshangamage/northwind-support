@@ -48,7 +48,7 @@ public class TicketQueriesTests : IAsyncLifetime
         await _db.SaveChangesAsync();
         _db.ChangeTracker.Clear();
         _commands.Clear();
-        _queries = new TicketQueries(_db, new FixedClock());
+        _queries = new TicketQueries(_db, new FixedClock(), TestSlaPolicy.Create());
     }
 
     [Theory]

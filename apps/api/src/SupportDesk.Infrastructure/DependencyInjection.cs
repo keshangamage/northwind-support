@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SupportDesk.Application.Abstractions;
+using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Domain.Repositories;
 using SupportDesk.Infrastructure.Data;
 using SupportDesk.Infrastructure.Queries;
@@ -20,6 +21,8 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<TicketTriage>();
+
         var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException(
                 "Connection string 'Default' is missing. See README.md for local setup.");

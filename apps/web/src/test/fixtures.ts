@@ -1,4 +1,4 @@
-import type { PagedResult, TicketListItem } from '../types/api';
+import type { PagedResult, TicketDetail, TicketListItem } from '../types/api';
 
 /** A list row with sensible defaults, so tests only state what they care about. */
 export function ticketListItem(overrides: Partial<TicketListItem> = {}): TicketListItem {
@@ -27,5 +27,15 @@ export function page(items: TicketListItem[]): PagedResult<TicketListItem> {
     pageSize: 20,
     totalCount: items.length,
     totalPages: 1,
+  };
+}
+
+export function ticketDetail(overrides: Partial<TicketDetail> = {}): TicketDetail {
+  return {
+    ...ticketListItem(),
+    description: 'A customer needs help with their invoice.',
+    customer: { id: 2, name: 'Fabrikam Inc', tier: 'Standard', email: 'help@example.com', phone: null },
+    category: { id: 2, name: 'Billing', requiresSpecialist: true },
+    ...overrides,
   };
 }

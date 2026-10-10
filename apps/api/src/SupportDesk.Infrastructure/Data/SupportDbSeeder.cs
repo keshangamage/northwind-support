@@ -195,6 +195,7 @@ public sealed class SupportDbSeeder(SupportDbContext db, IClock clock, ILogger<S
             entry.Property(t => t.UpdatedAtUtc).CurrentValue =
                 createdAtUtc.AddMinutes(row.ResolvedAfterMinutes ?? row.CreatedMinutesAgo / 2);
             entry.Property(t => t.DueAtUtc).CurrentValue = createdAtUtc.AddMinutes(row.SlaWindowMinutes);
+            entry.Property(t => t.SlaWindowSeconds).CurrentValue = row.SlaWindowMinutes * 60;
         }
     }
 

@@ -1,44 +1,29 @@
 # Approach
 
-## Task 1.1: filter request defect
+## Task 1: filtering
 
-The first check was the existing test suite, which passed on the starter code. The hook's effect
-watched only search and pagination, so its tests did not cover changing a dropdown by itself.
+The request effect missed filter dependencies. I changed it to watch the full query and debounce
+only search. Tests inspect actual fetch URLs and failed before the fix. Older responses are ignored.
 
-Regression tests now use the real API client and mock only `fetch`. They assert the URL sent after
-each filter change, rather than checking whether the displayed rows happen to look filtered. The
-status regression failed on the original code because no request was sent.
+Backend filters use simple `Where` clauses before count and paging. Existing joins and indexes were
+reused. This made the SLA filter easy to add without changing the list hook.
 
-The fix keeps the current request query in one state and the search input text in another. Only
-search waits 300 ms before updating the query. All other filter changes update it immediately, and
-the effect watches the whole query so a future filter does not need its own dependency. A request
-number prevents an older response from replacing newer results. Loading is derived from whether
-the current query has a completed response, avoiding a second loading-state update in the effect.
+## Task 2: triage and escalation
 
-Tests also cover clearing search, clearing all filters, pagination, debounce and reversed response
-order. A reload or remount was not used to hide the dependency bug.
+I kept the rules in three small domain classes: `SlaPolicy`, `TicketAssignment` and `TicketTriage`.
+Create and escalate share them. Repositories load data, and the clock makes time-based rules testable.
 
-## Task 1.2: database filtering
+Assignment uses open-ticket counts and category flags, with agent ID breaking ties. Escalation
+excludes its own ticket from capacity, records old/new values and saves history with the ticket.
 
-The existing query already joined the customer, category and optional agent, so those joins were
-reused. `ApplyFilters` adds one `Where` clause per supplied filter. Chaining these clauses gives
-AND behavior and leaves each condition easy to read and extend.
+The saved SLA window stays correct after escalation. A shared expression calculates status in SQL,
+so filtering, sorting and counts agree. The migration adds history and backfills existing windows.
 
-The filtered query is used for `CountAsync` before sorting and paging. Search is trimmed and
-checks title, reference and customer name. No query is materialized until the final page is read.
-Existing projections, stable sorting and `AsNoTracking` reads were preserved. The existing indexes
-are sufficient for this task; no schema migration was added.
+The UI reuses the SLA indicator, validates escalation input and refreshes history after success.
+Tests cover boundaries, assignment, database queries, errors and page updates. SQL Server and manual
+UI checks confirmed the behavior.
 
-Tests run against SQLite, using deliberately different customers, categories, agents, priorities
-and statuses. They verify exact matches, combined filters, search, conflicting filters and counts
-across pages. SQL capture checks filtering on both queries and database paging. Local SQL Server
-requests provide an additional check of the production database provider.
+## Remaining work
 
-## Tasks 2, 3 and 4
-
-Unfinished. No escalation, authentication or API-container implementation has been added.
-
-## Time tracking
-
-Record actual time spent on each task before submission. Setup time and implementation time
-should be distinguished; no estimated or invented time has been filled in here.
+Tasks 3 and 4 are unfinished. See README.md for limitations and setup.
+Record actual setup and task time before submission.

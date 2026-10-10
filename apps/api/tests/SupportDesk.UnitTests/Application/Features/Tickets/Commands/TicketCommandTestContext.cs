@@ -3,9 +3,11 @@ using SupportDesk.Application.Abstractions;
 using SupportDesk.Application.Contracts.Tickets;
 using SupportDesk.Application.Features.Tickets.Commands.AssignTicket;
 using SupportDesk.Application.Features.Tickets.Commands.ChangeTicketStatus;
+using SupportDesk.Application.Features.Tickets.Commands.EscalateTicket;
 using SupportDesk.Application.Features.Tickets.Commands.RaiseTicket;
 using SupportDesk.Application.Features.Tickets.Queries.GetTicket;
 using SupportDesk.Domain.Aggregates.Agents;
+using SupportDesk.Domain.Aggregates.Categories;
 using SupportDesk.Domain.Aggregates.Customers;
 using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Domain.Repositories;
@@ -21,11 +23,14 @@ internal sealed class TicketCommandTestContext
 {
     public TicketCommandTestContext()
     {
-        Customers.Setup(c => c.ExistsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        Categories.Setup(c => c.ExistsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        Customers.Setup(c => c.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Customer("Contoso", "help@example.com", null, CustomerTier.Standard, Clock.UtcNow));
+        var category = new Category("General", false, false);
+        typeof(Category).GetProperty(nameof(Category.Id))!.SetValue(category, 1);
+        Categories.Setup(c => c.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(category);
+        Agents.Setup(a => a.GetWorkloadsAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _workloads);
 
         Tickets.Setup(t => t.NextReferenceAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync("TCK-0041");
@@ -47,15 +52,24 @@ internal sealed class TicketCommandTestContext
         var getTicket = new GetTicketQueryHandler(TicketQueries.Object);
 
         RaiseTicket = new RaiseTicketCommandHandler(
-            Tickets.Object, Customers.Object, Categories.Object, UnitOfWork.Object, Clock, getTicket,
+            Tickets.Object, Customers.Object, Categories.Object, Agents.Object, new TicketTriage(TestSlaPolicy.Create()),
+            UnitOfWork.Object, Clock, getTicket,
             NullLogger<RaiseTicketCommandHandler>.Instance);
+
+        EscalateTicket = new EscalateTicketCommandHandler(
+            Tickets.Object, Customers.Object, Categories.Object, Agents.Object,
+            new TicketTriage(TestSlaPolicy.Create()), UnitOfWork.Object, Clock, getTicket, TicketQueries.Object);
 
         ChangeTicketStatus = new ChangeTicketStatusCommandHandler(Tickets.Object, UnitOfWork.Object, Clock, getTicket);
 
         AssignTicket = new AssignTicketCommandHandler(
-            Tickets.Object, Agents.Object, UnitOfWork.Object, Clock, getTicket,
+            Tickets.Object, Agents.Object, Categories.Object, UnitOfWork.Object, Clock, getTicket,
             NullLogger<AssignTicketCommandHandler>.Instance);
     }
+
+    private readonly List<AgentWorkload> _workloads = [];
+
+    public EscalateTicketCommandHandler EscalateTicket { get; }
 
     public Mock<ITicketRepository> Tickets { get; } = new();
 
@@ -86,12 +100,19 @@ internal sealed class TicketCommandTestContext
         Tickets.Setup(t => t.GetByIdAsync(ticket.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(ticket);
 
+        TicketQueries.Setup(q => q.GetEscalationsAsync(ticket.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ticket.Escalations.Select(e => new TicketEscalationDto(
+                e.Id, e.TicketId, e.FromPriority, e.ToPriority, null, null,
+                e.FromDueAtUtc, e.ToDueAtUtc, e.Reason, e.EscalatedBy, e.EscalatedAtUtc)).ToList());
         return ticket;
     }
 
     public void ExistingAgent(int id, string fullName = "Alex Turner", bool isActive = true)
     {
         var agent = new Agent(fullName, $"agent{id}@example.com", maxOpenTickets: 10, Clock.UtcNow);
+
+        typeof(Agent).GetProperty(nameof(Agent.Id))!.SetValue(agent, id);
+        _workloads.Add(new AgentWorkload(agent, 0));
 
         if (!isActive)
         {
