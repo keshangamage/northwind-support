@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace SupportDesk.Domain.Aggregates.Tickets;
 
 /// <summary>
@@ -6,10 +8,23 @@ namespace SupportDesk.Domain.Aggregates.Tickets;
 /// </summary>
 public static class SlaEvaluator
 {
-    public static SlaStatus Evaluate(DateTime? dueAtUtc, DateTime? resolvedAtUtc, DateTime nowUtc) =>
-        dueAtUtc is null ? SlaStatus.NotApplicable
-        : resolvedAtUtc is not null
-            ? (resolvedAtUtc <= dueAtUtc ? SlaStatus.Met : SlaStatus.Breached)
-        : nowUtc > dueAtUtc ? SlaStatus.Breached
-        : SlaStatus.WithinSla;
+    // EF uses this expression in SQL.
+    public static Expression<Func<Ticket, TicketSla>> Projection(DateTime now, double atRiskPercent) =>
+        ticket => new TicketSla
+        {
+            Ticket = ticket,
+            Status = ticket.DueAtUtc == null ? SlaStatus.NotApplicable
+                : ticket.ResolvedAtUtc != null
+                    ? ticket.ResolvedAtUtc <= ticket.DueAtUtc ? SlaStatus.Met : SlaStatus.Breached
+                : now > ticket.DueAtUtc ? SlaStatus.Breached
+                : now >= ticket.DueAtUtc.Value.AddSeconds(
+                    -Math.Ceiling((ticket.SlaWindowSeconds ?? 0) * atRiskPercent / 100))
+                    ? SlaStatus.AtRisk : SlaStatus.WithinSla
+        };
+}
+
+public sealed class TicketSla
+{
+    public required Ticket Ticket { get; init; }
+    public SlaStatus Status { get; init; }
 }

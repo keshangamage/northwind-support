@@ -1,5 +1,7 @@
 using SupportDesk.Application.Contracts.Tickets;
 using SupportDesk.Application.Exceptions;
+using SupportDesk.Domain.Aggregates.Agents;
+using SupportDesk.Domain.Aggregates.Categories;
 using SupportDesk.UnitTests.TestDoubles;
 
 namespace SupportDesk.UnitTests.Application.Features.Tickets.Commands;
@@ -46,6 +48,25 @@ public class AssignTicketCommandHandlerTests
             () => context.AssignTicket.HandleAsync(ticket.Id, new AssignTicketRequest(6), CancellationToken.None));
 
         Assert.Contains("Yuki Tanaka", exception.Message);
+        Assert.Null(ticket.AssignedAgentId);
+        context.VerifySaved(Times.Never());
+    }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 10)]
+    public async Task HandleAsync_RejectsMissingSpecializationOrFullAgent(bool specialist, int openCount)
+    {
+        var context = new TicketCommandTestContext();
+        var ticket = context.ExistingTicket(new TicketBuilder().Build());
+        context.ExistingAgent(4);
+        var agent = await context.Agents.Object.GetByIdAsync(4, default);
+        context.Categories.Setup(c => c.GetByIdAsync(ticket.CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Category("Configured category", specialist, false));
+        context.Agents.Setup(a => a.GetWorkloadsAsync(ticket.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new AgentWorkload(agent!, openCount) });
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            context.AssignTicket.HandleAsync(ticket.Id, new AssignTicketRequest(4), default));
         Assert.Null(ticket.AssignedAgentId);
         context.VerifySaved(Times.Never());
     }

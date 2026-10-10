@@ -14,6 +14,7 @@ public sealed class TicketBuilder
     private TicketStatus _status = TicketStatus.New;
     private int? _assignedAgentId;
     private DateTime? _resolvedAtUtc;
+    private TimeSpan? _slaWindow;
 
     public TicketBuilder WithReference(string reference)
     {
@@ -46,6 +47,12 @@ public sealed class TicketBuilder
         return this;
     }
 
+    public TicketBuilder WithSla(TimeSpan window)
+    {
+        _slaWindow = window;
+        return this;
+    }
+
     public Ticket Build()
     {
         var ticket = Ticket.Raise(
@@ -56,6 +63,12 @@ public sealed class TicketBuilder
             categoryId: 1,
             _priority,
             FixedClock.DefaultNow);
+
+        if (_slaWindow is { } window)
+        {
+            ticket.ApplyTriage(new TriageDecision(_priority, _assignedAgentId, window, "", "", ""),
+                FixedClock.DefaultNow);
+        }
 
         if (_assignedAgentId is not null)
         {

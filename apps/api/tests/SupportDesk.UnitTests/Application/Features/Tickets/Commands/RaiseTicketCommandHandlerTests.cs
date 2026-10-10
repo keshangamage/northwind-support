@@ -24,6 +24,7 @@ public class RaiseTicketCommandHandlerTests
         Assert.Equal(TicketPriority.High, created.Priority);
         Assert.Equal(FixedClock.DefaultNow, created.CreatedAtUtc);
         Assert.Equal(FixedClock.DefaultNow, created.UpdatedAtUtc);
+        Assert.Equal(FixedClock.DefaultNow.AddHours(8), created.DueAtUtc);
         context.VerifySaved(Times.Once());
     }
 
@@ -39,12 +40,25 @@ public class RaiseTicketCommandHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_WithNobodyEligible_ReturnsUnassignedTriage()
+    {
+        var context = new TicketCommandTestContext();
+        var result = await context.RaiseTicket.HandleAsync(Request(), default);
+        Assert.NotNull(context.AddedTicket);
+        Assert.Null(context.AddedTicket.AssignedAgentId);
+        Assert.Equal(FixedClock.DefaultNow.AddHours(24), context.AddedTicket.DueAtUtc);
+        Assert.NotNull(result.Triage);
+        Assert.Contains("Unassigned because", result.Triage.AssignmentReason);
+        context.VerifySaved(Times.Once());
+    }
+
+    [Fact]
     public async Task HandleAsync_WhenCustomerDoesNotExist_Throws()
     {
         var context = new TicketCommandTestContext();
         context.Customers
-            .Setup(c => c.ExistsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .Setup(c => c.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SupportDesk.Domain.Aggregates.Customers.Customer?)null);
 
         var exception = await Assert.ThrowsAsync<NotFoundException>(
             () => context.RaiseTicket.HandleAsync(Request(), CancellationToken.None));

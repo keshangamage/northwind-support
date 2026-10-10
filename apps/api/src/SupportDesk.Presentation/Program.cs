@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using SupportDesk.Application;
+using SupportDesk.Domain.Aggregates.Tickets;
 using SupportDesk.Infrastructure;
 using SupportDesk.Presentation.Extensions;
 using SupportDesk.Presentation.Filters;
@@ -26,6 +27,11 @@ builder.Services.AddCors(options => options.AddPolicy(
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+var sla = builder.Configuration.GetSection("Sla").Get<SlaPolicy>()
+    ?? throw new InvalidOperationException("The Sla configuration is missing.");
+sla.Validate();
+builder.Services.AddSingleton(sla);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);

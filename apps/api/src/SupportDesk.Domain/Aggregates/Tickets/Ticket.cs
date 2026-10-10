@@ -13,6 +13,8 @@ namespace SupportDesk.Domain.Aggregates.Tickets;
 /// </remarks>
 public sealed class Ticket : AggregateRoot
 {
+    private readonly List<TicketEscalation> _escalations = [];
+
     private Ticket()
     {
         // For EF Core.
@@ -44,6 +46,10 @@ public sealed class Ticket : AggregateRoot
     public DateTime? DueAtUtc { get; private set; }
 
     public DateTime? ResolvedAtUtc { get; private set; }
+
+    public int? SlaWindowSeconds { get; private set; }
+
+    public IReadOnlyCollection<TicketEscalation> Escalations => _escalations;
 
     /// <summary>True while the ticket still needs work from an agent.</summary>
     public bool IsOpen => Status is not (TicketStatus.Resolved or TicketStatus.Closed);
@@ -110,5 +116,47 @@ public sealed class Ticket : AggregateRoot
     {
         AssignedAgentId = agentId;
         UpdatedAtUtc = nowUtc;
+    }
+
+    public void ApplyTriage(TriageDecision decision, DateTime nowUtc)
+    {
+        Priority = decision.Priority;
+        DueAtUtc = nowUtc.Add(decision.Window);
+        SlaWindowSeconds = checked((int)decision.Window.TotalSeconds);
+        AssignTo(decision.AssignedAgentId, nowUtc);
+    }
+
+    public void EnsureCanEscalate()
+    {
+        if (!IsOpen)
+        {
+            throw new BusinessRuleViolationException($"{Status} tickets cannot be escalated.");
+        }
+
+        if (Priority == TicketPriority.Critical)
+        {
+            throw new BusinessRuleViolationException("Critical tickets cannot be escalated.");
+        }
+    }
+
+    public TicketEscalation Escalate(TriageDecision decision, string reason, string actor, DateTime nowUtc)
+    {
+        EnsureCanEscalate();
+        reason = reason.Trim();
+        actor = actor.Trim();
+        if (reason.Length is < 5 or > 500 || actor.Length is < 1 or > 100)
+        {
+            throw new BusinessRuleViolationException("A valid escalation reason and actor are required.");
+        }
+
+        if (decision.Priority != Priority + 1)
+        {
+            throw new BusinessRuleViolationException("Escalation must raise priority by one level.");
+        }
+
+        var escalation = new TicketEscalation(this, decision, reason, actor, nowUtc);
+        _escalations.Add(escalation);
+        ApplyTriage(decision, nowUtc);
+        return escalation;
     }
 }

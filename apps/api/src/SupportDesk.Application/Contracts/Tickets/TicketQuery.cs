@@ -20,6 +20,8 @@ public sealed record TicketQuery
 
     public TicketPriority? Priority { get; init; }
 
+    public SlaStatus? SlaStatus { get; init; }
+
     public int? CategoryId { get; init; }
 
     public int? CustomerId { get; init; }
@@ -28,7 +30,7 @@ public sealed record TicketQuery
 
     public bool UnassignedOnly { get; init; }
 
-    /// <summary>createdAtUtc | updatedAtUtc | dueAtUtc | priority | status.</summary>
+    /// <summary>createdAtUtc | updatedAtUtc | dueAtUtc | priority | status | slaStatus.</summary>
     public string SortBy { get; init; } = "createdAtUtc";
 
     /// <summary>asc | desc.</summary>
