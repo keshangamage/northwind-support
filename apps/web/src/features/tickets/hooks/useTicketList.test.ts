@@ -1,54 +1,176 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ticketsApi } from '../../../api/tickets';
 import { page, ticketListItem } from '../../../test/fixtures';
+import type { TicketFilters } from '../../../types/api';
 import { useTicketList } from './useTicketList';
 
-vi.mock('../../../api/tickets', () => ({
-  ticketsApi: {
-    getTickets: vi.fn(),
-  },
-}));
+const fetchMock = vi.fn<typeof fetch>();
 
-const getTickets = vi.mocked(ticketsApi.getTickets);
+function ticketResponse(title = 'A ticket') {
+  return new Response(JSON.stringify(page([ticketListItem({ title })])));
+}
+
+function lastQuery() {
+  const request = fetchMock.mock.calls.at(-1);
+  if (!request) throw new Error('No request was sent.');
+  return new URL(String(request[0]), 'http://localhost').searchParams;
+}
+
+const filterChanges: [string, Partial<TicketFilters>, string, string][] = [
+  ['status', { status: 'InProgress' }, 'status', 'InProgress'],
+  ['priority', { priority: 'High' }, 'priority', 'High'],
+  ['category', { categoryId: 2 }, 'categoryId', '2'],
+  ['customer', { customerId: 3 }, 'customerId', '3'],
+  ['agent', { assignedAgentId: 4 }, 'assignedAgentId', '4'],
+  ['unassigned', { unassignedOnly: true }, 'unassignedOnly', 'true'],
+  ['sort field', { sortBy: 'priority' }, 'sortBy', 'priority'],
+  ['sort direction', { sortDirection: 'asc' }, 'sortDirection', 'asc'],
+  ['page', { page: 2 }, 'page', '2'],
+  ['page size', { pageSize: 10 }, 'pageSize', '10'],
+];
 
 describe('useTicketList', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    getTickets.mockResolvedValue(page([ticketListItem()]));
+    fetchMock.mockReset().mockImplementation(async () => ticketResponse());
+    vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it('searches with the text the user typed, once the typing settles', async () => {
+  it.each(filterChanges)('requests immediately when %s changes', async (_, patch, key, value) => {
     const { result } = renderHook(() => useTicketList());
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
+    fetchMock.mockClear();
 
-    expect(getTickets).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      result.current.updateFilters({ search: 'invoice' });
+    await act(async () => {
+      result.current.updateFilters(patch);
     });
 
-    // Still inside the debounce window: no second request yet.
-    expect(getTickets).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastQuery().get(key)).toBe(value);
+    expect(lastQuery().get('page')).toBe(patch.page === undefined ? '1' : String(patch.page));
+  });
 
+  it('waits until typing settles and resets the page without requesting per keystroke', async () => {
+    const { result } = renderHook(() => useTicketList());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      result.current.updateFilters({ page: 3 });
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    fetchMock.mockClear();
+
+    await act(async () => {
+      result.current.updateFilters({ search: 'inv' });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await act(async () => {
+      result.current.updateFilters({ search: 'invoice' });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(299);
+    });
+
+    expect(result.current.filters.search).toBe('invoice');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastQuery().get('search')).toBe('invoice');
+    expect(lastQuery().get('page')).toBe('1');
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data?.items).toHaveLength(1);
+  });
+
+  it('still requests a status change after the search is cleared', async () => {
+    const { result } = renderHook(() => useTicketList());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      result.current.updateFilters({ search: 'invoice' });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      result.current.updateFilters({ search: '' });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    fetchMock.mockClear();
+
+    await act(async () => {
+      result.current.updateFilters({ status: 'InProgress' });
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastQuery().get('status')).toBe('InProgress');
+    expect(lastQuery().has('search')).toBe(false);
+  });
+
+  it('clears filters immediately and cancels pending search text', async () => {
+    const { result } = renderHook(() => useTicketList());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      result.current.updateFilters({ status: 'InProgress' });
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await act(async () => {
+      result.current.updateFilters({ search: 'invoice' });
+    });
+    fetchMock.mockClear();
+
+    await act(async () => {
+      result.current.resetFilters();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastQuery().has('status')).toBe(false);
+    expect(lastQuery().has('search')).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the latest results when an earlier request finishes later', async () => {
+    const { result } = renderHook(() => useTicketList());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(getTickets).toHaveBeenCalledTimes(2);
-    expect(getTickets).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: 'invoice', page: 1 }),
-    );
+    let finishEarlier!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => {
+      finishEarlier = resolve;
+    }));
+    await act(async () => {
+      result.current.updateFilters({ status: 'Open' });
+    });
+    fetchMock.mockResolvedValueOnce(ticketResponse('Latest result'));
+    await act(async () => {
+      result.current.updateFilters({ status: 'InProgress' });
+    });
+    await act(async () => {
+      finishEarlier(ticketResponse('Old result'));
+    });
 
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data?.items).toHaveLength(1);
+    expect(result.current.data?.items[0].title).toBe('Latest result');
   });
 });

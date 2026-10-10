@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../api/client';
 import { ticketsApi } from '../../../api/tickets';
 import type { PagedResult, TicketFilters, TicketListItem } from '../../../types/api';
@@ -20,39 +20,83 @@ export const emptyFilters: TicketFilters = {
 };
 
 interface State {
-  isLoading: boolean;
+  query?: TicketFilters;
   data?: PagedResult<TicketListItem>;
   error?: string;
 }
 
 /** Owns the ticket list's filters and the data they produce. */
 export function useTicketList() {
-  const [filters, setFilters] = useState<TicketFilters>(emptyFilters);
-  const [state, setState] = useState<State>({ isLoading: true });
+  const [query, setQuery] = useState<TicketFilters>(emptyFilters);
+  const [search, setSearch] = useState('');
+  const [state, setState] = useState<State>({});
+  const requestId = useRef(0);
 
-  const load = async () => {
-    setState((current) => ({ ...current, isLoading: true, error: undefined }));
+  // Wait for typing to stop.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setQuery((current) => {
+        if (current.search === search) return current;
+        return { ...current, search, page: 1 };
+      });
+    }, DEBOUNCE_MS);
 
-    try {
-      const data = await ticketsApi.getTickets(filters);
-      setState({ isLoading: false, data, error: undefined });
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Unable to load tickets.';
-      setState((current) => ({ ...current, isLoading: false, error: message }));
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const load = useCallback(() => {
+    const id = ++requestId.current;
+
+    return ticketsApi.getTickets(query)
+      .then((data) => {
+        if (id === requestId.current) {
+          setState({ query, data });
+        }
+      })
+      .catch((error: unknown) => {
+        if (id === requestId.current) {
+          const message = error instanceof ApiError ? error.message : 'Unable to load tickets.';
+          setState((current) => ({ ...current, query, error: message }));
+        }
+      });
+  }, [query]);
+
+  useEffect(() => {
+    const requests = requestId;
+    void load();
+
+    // Ignore old responses.
+    return () => {
+      requests.current++;
+    };
+  }, [load]);
+
+  const updateFilters = (patch: Partial<TicketFilters>) => {
+    const { search: nextSearch, ...otherFilters } = patch;
+    if (nextSearch !== undefined) setSearch(nextSearch);
+
+    if (Object.keys(otherFilters).length > 0) {
+      setQuery((current) => ({ ...current, ...otherFilters, page: otherFilters.page ?? 1 }));
     }
   };
 
-  useEffect(() => {
-    const handle = window.setTimeout(load, DEBOUNCE_MS);
+  const resetFilters = () => {
+    setSearch('');
+    setQuery(emptyFilters);
+  };
 
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- filters object identity changes every render
-  }, [filters.search, filters.page, filters.pageSize]);
+  const reload = () => {
+    setState((current) => ({ ...current, query: undefined, error: undefined }));
+    return load();
+  };
 
-  const updateFilters = (patch: Partial<TicketFilters>) =>
-    setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
-
-  const resetFilters = () => setFilters(emptyFilters);
-
-  return { filters, updateFilters, resetFilters, reload: load, ...state };
+  return {
+    filters: { ...query, search },
+    updateFilters,
+    resetFilters,
+    reload,
+    isLoading: state.query !== query,
+    data: state.data,
+    error: state.query === query ? state.error : undefined,
+  };
 }
