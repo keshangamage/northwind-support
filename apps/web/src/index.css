@@ -432,6 +432,20 @@ textarea[aria-invalid='true'] {
   max-width: 640px;
 }
 
+.escalation-history {
+  padding-left: 20px;
+}
+
+.escalation-history li + li {
+  border-top: 1px solid var(--colour-border);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.escalation-history p {
+  margin: 4px 0;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

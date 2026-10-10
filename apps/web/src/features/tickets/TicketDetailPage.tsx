@@ -5,6 +5,9 @@ import { useReferenceData } from '../../hooks/useReferenceData';
 import { AssignAgentControl } from './components/AssignAgentControl';
 import { StatusActions } from './components/StatusActions';
 import { TicketSummary } from './components/TicketSummary';
+import { EscalationPanel } from './components/EscalationPanel';
+import { EscalationHistory } from './components/EscalationHistory';
+import { useTicketEscalations } from './hooks/useTicketEscalations';
 import { useTicket } from './hooks/useTicket';
 
 export function TicketDetailPage() {
@@ -13,6 +16,7 @@ export function TicketDetailPage() {
 
   const { data: ticket, isLoading, error, reload, setData } = useTicket(ticketId);
   const reference = useReferenceData();
+  const history = useTicketEscalations(ticketId);
 
   if (Number.isNaN(ticketId)) {
     return <ErrorMessage message="That is not a valid ticket reference." />;
@@ -51,6 +55,19 @@ export function TicketDetailPage() {
           </div>
 
           <StatusActions ticket={ticket} onUpdated={setData} />
+          <EscalationPanel
+            ticket={ticket}
+            onEscalated={(result) => {
+              setData(result.ticket);
+              void history.reload();
+            }}
+          />
+          <EscalationHistory
+            entries={history.data ?? []}
+            isLoading={history.isLoading}
+            error={history.error}
+            onRetry={() => void history.reload()}
+          />
         </div>
 
         <aside className="detail-layout__side">

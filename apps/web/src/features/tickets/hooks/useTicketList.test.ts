@@ -19,6 +19,7 @@ function lastQuery() {
 const filterChanges: [string, Partial<TicketFilters>, string, string][] = [
   ['status', { status: 'InProgress' }, 'status', 'InProgress'],
   ['priority', { priority: 'High' }, 'priority', 'High'],
+  ['SLA status', { slaStatus: 'AtRisk' }, 'slaStatus', 'AtRisk'],
   ['category', { categoryId: 2 }, 'categoryId', '2'],
   ['customer', { customerId: 3 }, 'customerId', '3'],
   ['agent', { assignedAgentId: 4 }, 'assignedAgentId', '4'],

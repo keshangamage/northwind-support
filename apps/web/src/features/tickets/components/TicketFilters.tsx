@@ -5,6 +5,7 @@ import type {
   TicketFilters as Filters,
   TicketPriority,
   TicketStatus,
+  SlaStatus,
 } from '../../../types/api';
 import { humanize } from '../../../lib/format';
 
@@ -90,6 +91,24 @@ export function TicketFilters({
 
       <div className="filters__row">
         <div className="field">
+          <label className="field__label" htmlFor="filter-sla">SLA status</label>
+          <select
+            id="filter-sla"
+            value={filters.slaStatus ?? ''}
+            onChange={(event) =>
+              onChange({ slaStatus: (event.target.value || undefined) as SlaStatus | undefined })
+            }
+          >
+            <option value="">All SLA statuses</option>
+            <option value="WithinSla">Within SLA</option>
+            <option value="AtRisk">At risk</option>
+            <option value="Breached">Breached</option>
+            <option value="Met">Met</option>
+            <option value="NotApplicable">No SLA</option>
+          </select>
+        </div>
+
+        <div className="field">
           <label className="field__label" htmlFor="filter-category">
             Category
           </label>
@@ -162,6 +181,7 @@ export function TicketFilters({
             <option value="createdAtUtc:asc">Oldest first</option>
             <option value="dueAtUtc:asc">Due soonest</option>
             <option value="priority:desc">Highest priority</option>
+            <option value="slaStatus:desc">SLA status</option>
             <option value="updatedAtUtc:desc">Recently updated</option>
           </select>
         </div>
