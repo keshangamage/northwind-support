@@ -41,6 +41,67 @@ Full requirements are in **[`ASSIGNMENT_CANDIDATE.md`](ASSIGNMENT_CANDIDATE.md)*
 
 ---
 
+## Implementation status
+
+**Task 1 is implemented. Tasks 2, 3 and 4 are unfinished.**
+
+### DEFECT-117: root cause and fix
+
+The ticket-list effect depended only on search, page and page size, so changing another filter
+did not fetch new results. Typing in search triggered the effect and sent the previously selected
+filters, making the bug look intermittent.
+
+The hook now watches the whole query. Search text is kept separately and enters the query after
+300 ms without typing; dropdowns, sorting and pagination update the query immediately. Search and
+filter changes reset the page to 1. Older responses cannot overwrite newer results.
+
+To verify manually, open DevTools → Network and select **In progress**: a request containing
+`status=InProgress` should appear immediately. Type several search characters: one request should
+appear after typing stops. Clear search and change status again; it should still request results.
+
+### Filtering and design decisions
+
+- `TicketQueries.ApplyFilters` adds simple `Where` clauses to an `IQueryable`. The same filtered
+  query is counted and then sorted, paged and projected by EF Core. No rows are filtered in memory.
+- Status, priority, category, customer and agent are exact matches. Unassigned means a null agent.
+  All supplied filters combine with AND, including contradictory filters that return no matches.
+- Search is trimmed; blank text is ignored. It matches a substring of title, reference or customer
+  name. Case sensitivity follows the database collation; the local SQL Server uses its default.
+- A new filter needs a property in the API and frontend contracts, query-string serialization and
+  one predicate in `ApplyFilters`. The hook does not need another dependency or special wiring.
+- No new abstraction, database column, migration or index was needed. Reads remain `AsNoTracking`;
+  existing indexes cover status/priority and customer/category/agent IDs. Substring search can still
+  scan rows and would need a different approach at large scale.
+
+### Testing and AI usage
+
+`npm test` runs the backend and frontend tests. `npm run lint`, `npm run typecheck` and
+`npm run build` check lint, TypeScript and both builds.
+
+Frontend tests inspect actual fetch URLs, covering individual filters, debounce, clearing search,
+resetting filters and responses arriving out of order. They failed on the original hook. Backend
+tests execute real EF queries against an in-memory SQLite database, covering every exact filter,
+combined filters, customer/title/reference search, blank search, empty results and filtered paging.
+Captured SQL verifies that both the count and page queries contain `WHERE`, and the page uses
+database paging. These tests do not require Docker.
+
+The live SQL Server API was also checked through the web proxy for every filter, combined filters,
+trimmed and case-insensitive search, empty results and paging. With the demo data, High priority
+returned 14 tickets and 5 pages at a page size of 3. API logs confirmed `WHERE` in both the count
+and page queries, followed by `ORDER BY` and `OFFSET ... FETCH NEXT` for the page.
+
+OpenAI Codex was used to inspect the starter code, implement Task 1, write tests and run validation.
+The simple EF `Where` approach was retained. A first fetch implementation failed React's lint rule
+for setting state synchronously from an effect; it was revised to derive loading from the query
+that produced the results. Changes were checked with tests that failed before the fixes, then
+passed afterward, plus lint, types, builds and requests against local SQL Server.
+
+### Known limitations
+
+Automatic triage, escalation/history, the SLA filter, login/JWT and the API Docker image are not
+implemented yet. The application currently has no authentication. Task 1 does not change those
+features or introduce production deployment work.
+
 ## Quick start
 
 **Prerequisites:** .NET SDK 10 (`global.json`), Node.js 22 (`.nvmrc`; 20.19+ works), Docker.
@@ -87,7 +148,7 @@ Both pass on a clean checkout and neither needs a database.
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/tickets` | Paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `sortBy`, `sortDirection`. **Filters are accepted but not applied yet** (Task 1). |
+| `GET /api/tickets` | Database-filtered, paged list with `search`, `status`, `priority`, `categoryId`, `customerId`, `assignedAgentId`, `unassignedOnly`, `sortBy`, `sortDirection`. |
 | `GET /api/tickets/{id}` | One ticket |
 | `POST /api/tickets` | Create a ticket |
 | `PATCH /api/tickets/{id}/status` · `/assignment` | Change status / assignee |
