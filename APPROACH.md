@@ -23,7 +23,18 @@ The UI reuses the SLA indicator, validates escalation input and refreshes histor
 Tests cover boundaries, assignment, database queries, errors and page updates. SQL Server and manual
 UI checks confirmed the behavior.
 
+## Task 3: authentication
+
+I added a password hash to Agent and used Identity's password hasher. The development seeder fills
+missing credentials without resetting existing ones. JWT settings and the signing key come from
+configuration; one fallback policy protects the API. The random signing key stays in the ignored
+local `.env`, with an empty placeholder in `.env.example`.
+
+The login page and route guard share a small session store. The API client adds the token and clears
+it on `401`; logout and expiry do the same. Escalation actors come from token claims.
+Tests check login failures, protected endpoints, invalid tokens, actor spoofing and browser sessions.
+
 ## Remaining work
 
-Tasks 3 and 4 are unfinished. See README.md for limitations and setup.
+Task 4 is unfinished. See README.md for limitations and setup.
 Record actual setup and task time before submission.
