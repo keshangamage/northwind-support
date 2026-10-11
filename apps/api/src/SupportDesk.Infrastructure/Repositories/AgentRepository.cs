@@ -8,6 +8,9 @@ namespace SupportDesk.Infrastructure.Repositories;
 
 public sealed class AgentRepository(SupportDbContext db) : IAgentRepository
 {
+    public Task<Agent?> GetByEmailAsync(string email, CancellationToken ct) =>
+        db.Set<Agent>().AsNoTracking().FirstOrDefaultAsync(a => a.Email == email, ct);
+
     public async Task<IReadOnlyList<AgentWorkload>> GetWorkloadsAsync(int? excludedTicketId, CancellationToken ct) =>
         await db.Set<Agent>()
             .AsNoTracking()

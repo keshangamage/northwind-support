@@ -18,12 +18,13 @@ public class EscalateTicketCommandHandlerTests
         context.Clock.Advance(TimeSpan.FromDays(1));
 
         var result = await context.EscalateTicket.HandleAsync(ticket.Id,
-            new EscalateTicketRequest("Customer is blocked", "Team lead"), default);
+            new EscalateTicketRequest("Customer is blocked"), "Team lead", default);
 
         Assert.Equal(TicketPriority.High, ticket.Priority);
         Assert.Equal(context.Clock.UtcNow.AddHours(8), ticket.DueAtUtc);
         Assert.Equal(4, ticket.AssignedAgentId);
         Assert.Equal("Customer is blocked", result.Escalation.Reason);
+        Assert.Equal("Team lead", result.Escalation.EscalatedBy);
         Assert.Equal(context.Clock.UtcNow, result.Escalation.EscalatedAtUtc);
         context.Agents.Verify(a => a.GetWorkloadsAsync(ticket.Id, It.IsAny<CancellationToken>()), Times.Once);
         context.VerifySaved(Times.Once());
@@ -39,7 +40,7 @@ public class EscalateTicketCommandHandlerTests
         var ticket = context.ExistingTicket(new TicketBuilder().WithPriority(priority).WithStatus(status).Build());
 
         var error = await Assert.ThrowsAsync<BusinessRuleViolationException>(() =>
-            context.EscalateTicket.HandleAsync(ticket.Id, new EscalateTicketRequest("Please help", "Lead"), default));
+            context.EscalateTicket.HandleAsync(ticket.Id, new EscalateTicketRequest("Please help"), "Lead", default));
 
         Assert.Contains(message, error.Message);
         Assert.Empty(ticket.Escalations);
@@ -51,25 +52,22 @@ public class EscalateTicketCommandHandlerTests
     {
         var context = new TicketCommandTestContext();
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            context.EscalateTicket.HandleAsync(404, new EscalateTicketRequest("Please help", "Lead"), default));
+            context.EscalateTicket.HandleAsync(404, new EscalateTicketRequest("Please help"), "Lead", default));
         context.VerifySaved(Times.Never());
     }
 
     [Theory]
-    [InlineData("1234", "Lead", false)]
-    [InlineData("     ", "Lead", false)]
-    [InlineData("Valid reason", "", false)]
-    [InlineData("Valid reason", "   ", false)]
-    [InlineData(" 12345 ", " Lead ", true)]
-    public void Validator_ChecksTrimmedReasonAndActor(string reason, string actor, bool valid) =>
+    [InlineData("1234", false)]
+    [InlineData("     ", false)]
+    [InlineData(" 12345 ", true)]
+    public void Validator_ChecksTrimmedReason(string reason, bool valid) =>
         Assert.Equal(valid, new EscalateTicketRequestValidator()
-            .Validate(new EscalateTicketRequest(reason, actor)).IsValid);
+            .Validate(new EscalateTicketRequest(reason)).IsValid);
 
     [Theory]
-    [InlineData(500, 100, true)]
-    [InlineData(501, 100, false)]
-    [InlineData(500, 101, false)]
-    public void Validator_ChecksMaximumLengths(int reasonLength, int actorLength, bool valid) =>
+    [InlineData(500, true)]
+    [InlineData(501, false)]
+    public void Validator_ChecksMaximumLength(int reasonLength, bool valid) =>
         Assert.Equal(valid, new EscalateTicketRequestValidator()
-            .Validate(new EscalateTicketRequest(new string('a', reasonLength), new string('b', actorLength))).IsValid);
+            .Validate(new EscalateTicketRequest(new string('a', reasonLength))).IsValid);
 }

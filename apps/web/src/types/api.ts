@@ -86,7 +86,18 @@ export interface TicketEscalation {
 
 export interface EscalateTicketPayload {
   reason: string;
-  escalatedBy: string;
+}
+
+export interface AuthUser {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface AuthSession {
+  token: string;
+  expiresAtUtc: string;
+  user: AuthUser;
 }
 
 export interface EscalateTicketResult {

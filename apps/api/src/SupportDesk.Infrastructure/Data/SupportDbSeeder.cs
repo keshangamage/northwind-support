@@ -17,13 +17,17 @@ namespace SupportDesk.Infrastructure.Data;
 /// Every aggregate is built through its own behaviour. The two historical values no behaviour
 /// produces - a ticket's last update and its due date - are set through EF Core directly.
 /// </remarks>
-public sealed class SupportDbSeeder(SupportDbContext db, IClock clock, ILogger<SupportDbSeeder> logger)
+public sealed class SupportDbSeeder(
+    SupportDbContext db, IClock clock, IPasswordService passwords, ILogger<SupportDbSeeder> logger)
 {
+    public const string DevelopmentPassword = "Test@1234";
+
     /// <summary>Seeds the database, unless it already has tickets in it.</summary>
     public async Task SeedAsync(CancellationToken ct = default)
     {
         if (await db.Set<Ticket>().AnyAsync(ct))
         {
+            await SeedCredentialsAsync(ct);
             logger.LogInformation("Seed data already present; skipping.");
             return;
         }
@@ -39,6 +43,7 @@ public sealed class SupportDbSeeder(SupportDbContext db, IClock clock, ILogger<S
         db.AddRange(agents);
         await db.SaveChangesAsync(ct);
 
+        await SeedCredentialsAsync(ct);
         SeedSpecializations(agents, categories);
         await db.SaveChangesAsync(ct);
 
@@ -48,6 +53,17 @@ public sealed class SupportDbSeeder(SupportDbContext db, IClock clock, ILogger<S
         logger.LogInformation(
             "Seeded {Categories} categories, {Customers} customers, {Agents} agents and {Tickets} tickets.",
             categories.Count, customers.Count, agents.Count, await db.Set<Ticket>().CountAsync(ct));
+    }
+
+    private async Task SeedCredentialsAsync(CancellationToken ct)
+    {
+        var agents = await db.Set<Agent>().Where(a => a.PasswordHash == "").ToListAsync(ct);
+        foreach (var agent in agents)
+        {
+            agent.SetPasswordHash(passwords.Hash(agent, DevelopmentPassword));
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private static List<Category> SeedCategories() =>
