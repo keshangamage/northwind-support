@@ -11,6 +11,7 @@ using SupportDesk.Infrastructure;
 using SupportDesk.Presentation.Auth;
 using SupportDesk.Presentation.Extensions;
 using SupportDesk.Presentation.Filters;
+using SupportDesk.Presentation.Health;
 using SupportDesk.Presentation.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,6 +43,8 @@ builder.Services.AddSingleton(sla);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", timeout: TimeSpan.FromSeconds(5));
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
     ?? throw new InvalidOperationException("The Jwt configuration is missing.");
@@ -82,7 +85,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 
-    // Keeps a developer machine one command away from a working database.
+    // Set up the local demo database.
     await app.MigrateAndSeedAsync();
 }
 
@@ -91,6 +94,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
 
