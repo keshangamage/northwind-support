@@ -34,7 +34,16 @@ The login page and route guard share a small session store. The API client adds 
 it on `401`; logout and expiry do the same. Escalation actors come from token claims.
 Tests check login failures, protected endpoints, invalid tokens, actor spoofing and browser sessions.
 
-## Remaining work
+## Task 4: Docker
 
-Task 4 is unfinished. See README.md for limitations and setup.
+The SDK stage restores project files before copying source, then publishes to a smaller runtime
+image. It runs as the built-in `app` user. Compose passes settings at runtime and waits for SQL Server.
+Development settings and secrets are excluded from the image.
+
+The public health check uses the existing DbContext to check database reachability. Development
+startup applies migrations and seeds demo data; production should run migrations separately.
+Fresh-volume, cached-restore, non-root and database-outage checks passed. The web proxy uses port 5080.
+
+## Submission
+
 Record actual setup and task time before submission.

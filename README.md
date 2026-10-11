@@ -2,7 +2,7 @@
 
 A ticket management app built with .NET 10, React, TypeScript and SQL Server.
 
-Tasks 1–3 are complete. The API Docker image is unfinished.
+All four tasks are complete.
 Full requirements: [ASSIGNMENT_CANDIDATE.md](ASSIGNMENT_CANDIDATE.md).
 
 ## Run locally
@@ -24,8 +24,7 @@ npm run db:up
 docker compose ps
 ```
 
-Wait for SQL Server to become healthy. On Apple Silicon, use
-`DOCKER_DEFAULT_PLATFORM=linux/amd64 npm run db:up`.
+Wait for SQL Server to become healthy. Compose uses the amd64 SQL Server image on Apple Silicon.
 
 Start the API in one terminal:
 
@@ -45,6 +44,40 @@ The development API applies migrations and seeds 40 tickets on startup.
 Local database credentials are `sa` / `Local_Dev_Password1`; overrides are in `.env.example`.
 Development login: `alex.turner@northwind-support.example` / `Test@1234`.
 Other active seeded agents use the same local password. Inactive Yuki cannot sign in.
+
+## Run the API in Docker
+
+After setting up `.env` above:
+
+```bash
+docker compose up --build -d
+docker compose ps
+curl http://localhost:5080/health
+```
+
+Start the web app against the container:
+
+```bash
+VITE_API_PROXY_TARGET=http://localhost:5080 npm run web
+```
+
+API: http://localhost:5080. Swagger: http://localhost:5080/swagger.
+`/health` is public: `200 Healthy` when the database is reachable, otherwise `503 Unhealthy`.
+Other API endpoints still require a token. Use the development login above.
+
+The multi-stage image restores project files first, then publishes with the .NET 10 SDK.
+Only published files go into the ASP.NET runtime image, which runs as `app` on port 8080.
+Compose publishes it on localhost:5080 and waits for healthy SQL Server. The API uses `sqlserver`
+as its database host. The JWT key, database connection and environment are passed at runtime;
+local secrets, development configuration, build output and the web app are excluded from the image.
+`curl` is included for the container health check.
+
+The default Development environment applies migrations and seeds an empty database. Restarts keep
+existing data. In production, run migrations once as a separate deployment step before starting API
+instances. This avoids concurrent schema changes and lets the API use fewer database permissions.
+Use Production to disable demo seeding and Swagger.
+
+`docker compose down` stops the services and keeps the database. Adding `-v` deletes its data.
 
 ## Ticket filtering
 
@@ -89,7 +122,7 @@ missing credentials and keeps existing hashes.
 
 `POST /api/auth/login` returns a JWT, expiry and agent details. Wrong email, wrong password and inactive
 agents receive the same `401` message. `GET /api/auth/me` returns the current active agent.
-A global fallback policy protects existing endpoints. Login and development Swagger stay open.
+A global fallback policy protects existing endpoints. Login, health and development Swagger stay open.
 Tokens last 60 minutes; issuer, audience, signature and expiry are validated without clock grace.
 Each machine generates its own random key and stores it in the ignored `.env` file. `.env.example`
 contains an empty placeholder. The command above exports the key because `npm run api` does not load
@@ -129,13 +162,21 @@ npm run build
 npm run format:check
 ```
 
-All 165 tests and these checks passed. Tests cover actual filter requests, debounce, SQL count/paging,
+All 167 tests and these checks passed. Tests cover actual filter requests, debounce, SQL count/paging,
 SLA boundaries, assignment, escalation, history, client validation and server conflicts.
 Database tests use SQLite and need no Docker. Live SQL Server checks also passed; logs confirmed
 `WHERE`/`CASE` filtering and `OFFSET ... FETCH NEXT` paging. Manual UI checks passed.
 Authentication tests use the real API with SQLite: generic login failures, protected endpoints,
 invalid tokens, current user and token-based escalation actors. Frontend tests cover login validation,
 return navigation, token headers, pending state, logout, expiry and `401` redirects.
+Health tests cover public access and an unavailable database.
+
+Docker checks used a separate Compose project and an empty volume (`down -v`, then `up --build`).
+All migrations ran, 40 tickets were seeded, and login and authenticated ticket reads passed.
+Stopping its database returned `503 Unhealthy`; restarting restored `200 Healthy`.
+A `.cs` change reused the cached restore layer. `docker compose exec api whoami` returned `app`.
+Local arm64 image sizes: runtime **355 MB**, SDK **974 MB** (about 64% smaller).
+The Vite proxy was checked against the container on port 5080.
 
 ## AI usage
 
@@ -144,7 +185,7 @@ loading-state and configuration errors. Tests and live API checks verified the f
 
 ## Limitations
 
-API containerisation is unfinished. JWTs cannot be revoked before expiry; refresh tokens, password
-reset, MFA, lockout and rate limiting are outside the scope.
+JWTs cannot be revoked before expiry; refresh tokens, password reset, MFA, lockout and rate limiting
+are outside the scope.
 Concurrent workload locking, paged history and browser end-to-end tests are not implemented.
 Production needs safe reference allocation and capacity checks. Large-scale search may need a search index.
