@@ -62,8 +62,11 @@ public sealed class TicketsController : ControllerBase
     [HttpPost("{id:int}/escalate")]
     public Task<EscalateTicketResult> Escalate(
         int id, EscalateTicketRequest request,
-        [FromServices] EscalateTicketCommandHandler handler, CancellationToken ct) =>
-        handler.HandleAsync(id, request, ct);
+        [FromServices] EscalateTicketCommandHandler handler, CancellationToken ct)
+    {
+        var actor = User.Identity!.Name!;
+        return handler.HandleAsync(id, request, actor.Length > 100 ? actor[..100] : actor, ct);
+    }
 
     [HttpGet("{id:int}/escalations")]
     public Task<IReadOnlyList<TicketEscalationDto>> Escalations(

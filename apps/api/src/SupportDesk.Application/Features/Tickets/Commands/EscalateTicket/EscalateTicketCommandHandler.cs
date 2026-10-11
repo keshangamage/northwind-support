@@ -18,7 +18,8 @@ public sealed class EscalateTicketCommandHandler(
     GetTicketQueryHandler getTicket,
     ITicketQueries queries)
 {
-    public async Task<EscalateTicketResult> HandleAsync(int id, EscalateTicketRequest request, CancellationToken ct)
+    public async Task<EscalateTicketResult> HandleAsync(
+        int id, EscalateTicketRequest request, string escalatedBy, CancellationToken ct)
     {
         var ticket = await tickets.GetByIdAsync(id, ct) ?? throw new NotFoundException("Ticket", id);
         ticket.EnsureCanEscalate();
@@ -30,7 +31,7 @@ public sealed class EscalateTicketCommandHandler(
         // Exclude this ticket when checking capacity.
         var workloads = await agents.GetWorkloadsAsync(id, ct);
         var decision = triage.EscalationDecision(ticket, category, customer.Tier, workloads);
-        var escalation = ticket.Escalate(decision, request.Reason, request.EscalatedBy, clock.UtcNow);
+        var escalation = ticket.Escalate(decision, request.Reason, escalatedBy, clock.UtcNow);
         await unitOfWork.SaveChangesAsync(ct);
 
         var updated = await getTicket.HandleAsync(id, ct);
