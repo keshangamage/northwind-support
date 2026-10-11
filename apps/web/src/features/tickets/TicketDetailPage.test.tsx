@@ -37,7 +37,6 @@ describe('TicketDetailPage', () => {
     expect(await screen.findByText('Medium')).toBeVisible();
     expect(await screen.findByText('No escalations yet.')).toBeVisible();
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Customer is blocked' } });
-    fireEvent.change(screen.getByLabelText('Escalated by'), { target: { value: 'Team lead' } });
     fireEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
     expect(await screen.findByText('Medium → High')).toBeVisible();
     expect(screen.getByText('High')).toBeVisible();

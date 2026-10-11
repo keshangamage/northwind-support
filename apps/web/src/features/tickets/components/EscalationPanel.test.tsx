@@ -6,9 +6,8 @@ import { EscalationPanel } from './EscalationPanel';
 
 const fetchMock = vi.fn<typeof fetch>();
 
-function fillForm(reason = 'Customer is blocked', actor = 'Team lead') {
+function fillForm(reason = 'Customer is blocked') {
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: reason } });
-  fireEvent.change(screen.getByLabelText('Escalated by'), { target: { value: actor } });
   fireEvent.click(screen.getByRole('button', { name: 'Escalate ticket' }));
 }
 
@@ -23,13 +22,6 @@ describe('EscalationPanel', () => {
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
     fillForm(reason);
     expect(screen.getByText('Reason must be between 5 and 500 characters.')).toBeVisible();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it.each(['', '   ', 'a'.repeat(101)])('blocks an invalid actor before calling the API', (actor) => {
-    render(<EscalationPanel ticket={ticketDetail()} onEscalated={vi.fn()} />);
-    fillForm('Customer is blocked', actor);
-    expect(screen.getByText('Escalated by is required and must be at most 100 characters.')).toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -59,12 +51,13 @@ describe('EscalationPanel', () => {
     let finish!: (response: Response) => void;
     fetchMock.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<EscalationPanel ticket={ticketDetail()} onEscalated={onEscalated} />);
-    fillForm('  Customer is blocked  ', '  Team lead  ');
+    fillForm('  Customer is blocked  ');
     expect(screen.getByRole('button', { name: 'Escalating...' })).toBeDisabled();
     expect(screen.getByLabelText('Reason')).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledWith('/api/tickets/12/escalate', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ reason: 'Customer is blocked', escalatedBy: 'Team lead' }),
+      method: 'POST', body: JSON.stringify({ reason: 'Customer is blocked' }),
     }));
+    expect(screen.queryByLabelText('Escalated by')).not.toBeInTheDocument();
     finish(new Response(JSON.stringify(updated)));
     await waitFor(() => expect(onEscalated).toHaveBeenCalledWith(updated));
     expect(screen.getByLabelText('Reason')).toHaveValue('');

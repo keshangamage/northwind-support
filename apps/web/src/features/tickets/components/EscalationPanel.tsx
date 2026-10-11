@@ -11,7 +11,6 @@ interface EscalationPanelProps {
 
 export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
   const [reason, setReason] = useState('');
-  const [actor, setActor] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
@@ -26,9 +25,6 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
     if (reason.trim().length < 5 || reason.trim().length > 500) {
       validation.reason = 'Reason must be between 5 and 500 characters.';
     }
-    if (actor.trim().length < 1 || actor.trim().length > 100) {
-      validation.escalatedBy = 'Escalated by is required and must be at most 100 characters.';
-    }
     setErrors(validation);
     setSubmitError(undefined);
     if (Object.keys(validation).length > 0) return;
@@ -37,7 +33,6 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
     try {
       const result = await ticketsApi.escalateTicket(ticket.id, {
         reason: reason.trim(),
-        escalatedBy: actor.trim(),
       });
       setReason('');
       onEscalated(result);
@@ -72,17 +67,6 @@ export function EscalationPanel({ ticket, onEscalated }: EscalationPanelProps) {
                 value={reason}
                 disabled={isSaving}
                 onChange={(event) => setReason(event.target.value)}
-              />
-            )}
-          </Field>
-          <Field id="escalation-actor" label="Escalated by" error={errors.escalatedBy}>
-            {(props) => (
-              <input
-                {...props}
-                maxLength={100}
-                value={actor}
-                disabled={isSaving}
-                onChange={(event) => setActor(event.target.value)}
               />
             )}
           </Field>

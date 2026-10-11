@@ -1,4 +1,5 @@
 import type { ProblemDetails } from '../types/api';
+import { getSession, setSession } from '../features/auth/session';
 
 /**
  * Where the API lives. In development this stays '/api' and the Vite dev server proxies it
@@ -30,15 +31,23 @@ export class ApiError extends Error {
  * {@link ApiError} that callers can show to the user.
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const session = getSession();
+  if (session && Date.parse(session.expiresAtUtc) <= Date.now()) {
+    setSession(null);
+    if (path !== '/auth/login') throw new ApiError(401, 'Your session has expired. Please sign in.');
+  }
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (session && Date.parse(session.expiresAtUtc) > Date.now()) {
+    headers.set('Authorization', `Bearer ${session.token}`);
+  }
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   });
 
   if (!response.ok) {
+    if (response.status === 401) setSession(null);
     const problem = await readProblem(response);
 
     throw new ApiError(
